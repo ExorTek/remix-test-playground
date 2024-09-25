@@ -1,0 +1,11 @@
+node_modules
+
+/.cache
+/build
+.env
+.yarn/install-state.gz
+.yarn/unplugged
+.pnp.loader.mjs
+.pnp.js
+.pnp.cjs
+.idea
