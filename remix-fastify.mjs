@@ -1,49 +1,40 @@
 import path from "node:path";
-import url from "node:url";
 import fastifyPlugin from "fastify-plugin";
 import { createReadableStreamFromReadable, createRequestHandler as createRemixRequestHandler } from "@remix-run/node";
 import { Readable } from "node:stream";
 import { cacheHeader } from "pretty-cache-header";
+import * as url from "node:url";
 
-const getUrl = (protocol, hostname, originalUrl) => {
-    const origin = `${protocol}://${hostname}`;
-    const url = `${origin}${originalUrl}`;
-    return new URL(url);
-}
-
+const getUrl = (protocol, hostname, originalUrl) =>
+    new URL(`${protocol}://${hostname}${originalUrl}`);
 
 const responseToReadable = (response) => {
     if (!response.body) return null;
 
     const reader = response.body.getReader();
-    const readable = new Readable();
-    readable._read = async () => {
-        const result = await reader.read();
-        if (!result.done) {
-            readable.push(Buffer.from(result.value));
-        } else {
-            readable.push(null);
-            return reader.cancel();
+    return new Readable({
+        async read() {
+            const { done, value } = await reader.read();
+            if (done) {
+                this.push(null);
+                return reader.cancel();
+            }
+            this.push(Buffer.from(value));
         }
-    }
-}
-const sendRemixResponse = async (reply, result) => {
-    reply.status(result.status);
+    });
+};
 
-    for (let [key, values] of result.headers.entries()) {
-        reply.headers({[key]: values});
-    }
+const sendRemixResponse = async (reply, result) => {
+    reply.headers(Object.fromEntries(result.headers));
 
     if (result.body) {
-        let stream = responseToReadable(result.clone());
-        return reply.send(stream);
+        return reply.send(responseToReadable(result.clone()));
     }
-
     return reply.send(await result.text());
-}
+};
+
 const createRemixRequest = (req, rep) => {
     const url = getUrl(req.protocol, req.hostname, req.originalUrl);
-
     const abortController = new AbortController();
 
     rep.raw.on("close", () => abortController.abort());
@@ -60,56 +51,53 @@ const createRemixRequest = (req, rep) => {
     }
 
     return new Request(url, init);
+};
 
-}
-
-const createRequestHandler = (
-    {
-        build,
-        getLoadContext,
-        mode = process.env.NODE_ENV,
-    }
-) => {
+const createRequestHandler = ({ build, getLoadContext, mode = process.env.NODE_ENV }) => {
     const handler = createRemixRequestHandler(build, mode);
 
     return async (request, reply) => {
-
         const remixRequest = createRemixRequest(request, reply);
         const loadContext = getLoadContext ? await getLoadContext(request, reply) : undefined;
         const result = await handler(remixRequest, loadContext);
-        return sendRemixResponse(reply, result)
-    }
+        return sendRemixResponse(reply, result);
+    };
+};
+
+const DEFAULT_OPTIONS = {
+    basename: "/",
+    buildDirectory: "build",
+    serverBuildFile: "index.js",
+    mode: process.env.NODE_ENV,
+    assetCacheControl: { public: true, maxAge: "1 year", immutable: true },
+    defaultCacheControl: { public: true, maxAge: "1 hour" },
 };
 
 const remixFastify = fastifyPlugin(
-    async (fastify, {
-        basename = "/",
-        buildDirectory = "build",
-        serverBuildFile = "index.js",
-        getLoadContext,
-        mode = process.env.NODE_ENV,
-        viteOptions,
-        fastifyOptions,
-        assetCacheControl = {public: true, maxAge: "1 year", immutable: true},
-        defaultCacheControl = {public: true, maxAge: "1 hour"},
-        productionServerBuild,
-    }) => { // removed 'done' from here
+    async (fastify, options) => {
+        const {
+            basename,
+            buildDirectory,
+            serverBuildFile,
+            getLoadContext,
+            mode,
+            viteOptions,
+            fastifyOptions,
+            assetCacheControl,
+            defaultCacheControl,
+            productionServerBuild,
+        } = { ...DEFAULT_OPTIONS, ...options };
 
-        let vite = undefined;
+        let vite;
         if (mode !== "production") {
-            vite = await import("vite").then(mod => {
-                    return mod.createServer({
-                        ...viteOptions,
-                        server: {
-                            ...viteOptions?.server,
-                            middlewareMode: true,
-                        }
-                    });
-                }
-            );
+            const { createServer } = await import("vite");
+            vite = await createServer({
+                ...viteOptions,
+                server: { ...viteOptions?.server, middlewareMode: true },
+            });
         }
-        const cwd = process.env.REMIX_ROOT ?? process.cwd();
 
+        const cwd = process.env.REMIX_ROOT ?? process.cwd();
         const mainBuildDir = path.resolve(cwd, buildDirectory);
         const serverBuildPath = path.resolve(mainBuildDir, "server", serverBuildFile);
         const serverBuildUrl = url.pathToFileURL(serverBuildPath).href;
@@ -128,7 +116,8 @@ const remixFastify = fastifyPlugin(
         } else {
             const buildDir = path.join(mainBuildDir, "client");
             const assetDir = path.join(buildDir, "assets");
-            await fastify.register(await import("@fastify/static").then((mod) => mod.default), {
+            const staticPlugin = await import("@fastify/static").then((mod) => mod.default);
+            await fastify.register(staticPlugin, {
                 root: buildDir,
                 prefix: "/",
                 wildcard: false,
@@ -139,10 +128,10 @@ const remixFastify = fastifyPlugin(
                 lastModified: true,
                 setHeaders: (res, filepath) => {
                     const isAsset = filepath.startsWith(assetDir);
-                    res.setHeaders(
-                        isAsset ? cacheHeader(assetCacheControl)
-                            : cacheHeader(defaultCacheControl)
-                    )
+                    res.setHeader(
+                        "cache-control",
+                        cacheHeader(isAsset ? assetCacheControl : defaultCacheControl)
+                    );
                 },
                 ...fastifyOptions,
             });
@@ -150,16 +139,12 @@ const remixFastify = fastifyPlugin(
 
         fastify.register(async (server) => {
             server.removeAllContentTypeParsers();
-
-            server.addContentTypeParser("*", (_request, payload, done) => {
-                done(null, payload);
-            });
-
-            const basePath = basename.replace(/\/+$/, "") + "/*";
-
+            server.addContentTypeParser("*", (_request, payload, done) => done(null, payload));
+            const basePath = `${basename.replace(/\/+$/, "")}/*`;
             server.all(basePath, remixHandler);
         });
-    }, {
+    },
+    {
         name: "fastify-remix",
         fastify: "5.x",
     }
