@@ -1,9 +1,17 @@
-import remixFastify from "./remix-fastify.mjs";
+import remixFastify from "@exortek/remix-fastify";
 import { fastify } from "fastify";
 
 const app = fastify();
 
-await app.register(remixFastify)
+await app.register(remixFastify({
+    buildDirectory: 'build',
+    clientDirectory: 'client',
+    serverDirectory: 'server',
+    serverBuildFile: 'index.js',
+    mode: process.env.NODE_ENV || 'development',
+    fastifyStaticOptions: {},
+    viteOptions: {},
+}))
 
 app.listen({
     port: 3000,
