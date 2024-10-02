@@ -8,10 +8,14 @@
     "dev": "remix vite:dev",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "start": "remix-serve ./build/server/index.js",
-    "start:f:prod": "cross-env NODE_ENV=production node ./fastify-server.mjs",
-    "start:f:dev": "cross-env NODE_ENV=development node ./fastify-server.mjs",
-    "start:e:dev": "cross-env NODE_ENV=development node --watch-path ./app --watch ./express-server.mjs",
-    "start:e:prod": "cross-env NODE_ENV=production node ./express-server.mjs"
+    "dev:c:fastify": "cross-env NODE_ENV=development node ./fastify-server.cjs",
+    "dev:c:express": "cross-env NODE_ENV=development node  ./express-server.cjs",
+    "start:c:fastify": "cross-env NODE_ENV=production node ./fastify-server.cjs",
+    "start:c:express": "cross-env NODE_ENV=production node ./express-server.cjs",
+    "dev:m:fastify": "cross-env NODE_ENV=development node ./fastify-server.mjs",
+    "dev:m:express": "cross-env NODE_ENV=development node ./express-server.mjs",
+    "start:m:fastify": "cross-env NODE_ENV=production node ./fastify-server.mjs",
+    "start:m:express": "cross-env NODE_ENV=production node ./express-server.mjs"
   },
   "dependencies": {
     "@fastify/middie": "^9.0.2",
