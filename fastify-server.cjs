@@ -4,7 +4,15 @@ const remixFastify = require("@exortek/remix-fastify");
 
 const app = fastify();
 
-app.register(remixFastify({}));
+app.register(remixFastify({
+    buildDirectory: 'build',
+    clientDirectory: 'build/client',
+    serverDirectory: 'build/server',
+    serverBuildFile: 'build/server/build.js',
+    mode: process.env.NODE_ENV,
+    fastifyStaticOptions: {},
+    viteOptions: {}
+}));
 
 app.listen({
     port: 3000,
