@@ -18,6 +18,8 @@
     "start:m:express": "cross-env NODE_ENV=production node ./express-server.mjs"
   },
   "dependencies": {
+    "@exortek/remix-express": "^1.0.8",
+    "@exortek/remix-fastify": "^1.0.1",
     "@fastify/middie": "^9.0.2",
     "@fastify/static": "^8.0.1",
     "@remix-run/express": "^2.12.1",
