@@ -3,15 +3,7 @@ import { fastify } from "fastify";
 
 const app = fastify();
 
-await app.register(remixFastify({
-    buildDirectory: 'build',
-    clientDirectory: 'client',
-    serverDirectory: 'server',
-    serverBuildFile: 'index.js',
-    mode: process.env.NODE_ENV || 'development',
-    fastifyStaticOptions: {},
-    viteOptions: {},
-}))
+await app.register(remixFastify({}))
 
 app.listen({
     port: 3000,
